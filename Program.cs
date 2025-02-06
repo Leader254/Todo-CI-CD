@@ -1,5 +1,9 @@
+using System.Reflection;
 using TodoAPI.AppDataContext;
+using TodoAPI.Interfaces;
+using TodoAPI.Middleware;
 using TodoAPI.Models;
+using TodoAPI.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -14,13 +18,23 @@ builder.Services.AddAutoMapper(AppDomain.CurrentDomain.GetAssemblies());
 
 builder.Services.Configure<DbSettings>(builder.Configuration.GetSection("DbSettings"));
 builder.Services.AddSingleton<TodoDbContext>();
+builder.Services.AddExceptionHandler<GlobalExceptionHandler>();
+builder.Services.AddScoped<ITodoServices, TodoServices>();
 
-builder.Services.AddExceptionHandler(options =>
+var xmlFilename = $"{Assembly.GetExecutingAssembly().GetName().Name}.xml";
+builder.Services.AddSwaggerGen(c =>
 {
-    options.ExceptionHandlingPath = "/error";
+    c.IncludeXmlComments(Path.Combine(AppContext.BaseDirectory, xmlFilename));
 });
 
-builder.Services.AddProblemDetails(); // optional for automatic problem response
+
+// builder.Services.AddExceptionHandler(options =>
+// {
+//     options.ExceptionHandlingPath = "/error";
+// });
+
+builder.Services.AddProblemDetails();
+builder.Services.AddLogging();
 
 var app = builder.Build();
 {
@@ -36,7 +50,7 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseHttpsRedirection();
-app.UseExceptionHandler("/error");
+app.UseExceptionHandler();
 app.UseAuthorization();
 
 app.MapControllers();
