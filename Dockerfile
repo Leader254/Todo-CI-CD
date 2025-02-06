@@ -1,5 +1,5 @@
-# Use the official .NET SDK image to build the app
-FROM mcr.microsoft.com/dotnet/sdk:6.0 AS build
+# Use the .NET 8 SDK image to build the app
+FROM mcr.microsoft.com/dotnet/sdk:8.0 AS build
 
 # Set the working directory inside the container
 WORKDIR /app
@@ -12,8 +12,8 @@ RUN dotnet restore
 COPY . ./
 RUN dotnet publish -c Release -o /app/publish
 
-# Use the official .NET runtime image to run the app
-FROM mcr.microsoft.com/dotnet/aspnet:6.0 AS final
+# Use the .NET 8 runtime image to run the app
+FROM mcr.microsoft.com/dotnet/aspnet:8.0 AS final
 
 # Set the working directory inside the container
 WORKDIR /app
