@@ -60,19 +60,17 @@ jobs:
         with:
           name: .net-app
 
-      - name: Set environment variables in Azure
+      - name: Log in to Azure  
+        uses: azure/login@v1  
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}  
+
+      - name: Configure environment variables in Azure
+        run: |
+          az webapp config appsettings set --name ${{ env.AZURE_WEBAPP_NAME }} --resource-group ${{ secrets.AZURE_RESOURCE_GROUP }} --settings DB_CONNECTION_STRING=${{ secrets.DB_CONNECTION_STRING }}
+
+      - name: Deploy to Azure Web App
         uses: azure/webapps-deploy@v2
         with:
           app-name: ${{ env.AZURE_WEBAPP_NAME }}
-          publish-profile: ${{ secrets.AZURE_WEBAPP_PUBLISH_PROFILE }}
           package: ${{ env.AZURE_WEBAPP_PACKAGE_PATH }}
-
-      - name: Configure environment variables in Azure
-        uses: azure/appservice-settings@v1
-        with:
-          app-name: ${{ env.AZURE_WEBAPP_NAME }}
-          publish-profile: ${{ secrets.AZURE_WEBAPP_PUBLISH_PROFILE }}
-          app-settings-json: |
-            [
-              { "name": "DB_CONNECTION_STRING", "value": "${{ secrets.DB_CONNECTION_STRING }}", "slotSetting": false }
-            ]
