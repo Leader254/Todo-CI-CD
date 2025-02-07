@@ -9,14 +9,30 @@ var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddControllers();
 
-// Add services to the container.
-// Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle
+// Check the environment
+var environment = builder.Environment.EnvironmentName;
+Console.WriteLine($"Running in {environment} mode.");
+
+// Configure DbSettings
+var dbSettings = builder.Configuration.GetSection("DbSettings").Get<DbSettings>();
+
+if (environment == "Production")
+{
+    Console.WriteLine("Fetching database connection string from environment variable...");
+    dbSettings.ConnectionString = Environment.GetEnvironmentVariable("DB_CONNECTION_STRING") ?? dbSettings.ConnectionString;
+}
+
+// Register the final DbSettings
+builder.Services.Configure<DbSettings>(options =>
+{
+    options.ConnectionString = dbSettings.ConnectionString;
+});
+
+// Add services to the container
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
-
 builder.Services.AddAutoMapper(AppDomain.CurrentDomain.GetAssemblies());
 
-builder.Services.Configure<DbSettings>(builder.Configuration.GetSection("DbSettings"));
 builder.Services.AddSingleton<TodoDbContext>();
 builder.Services.AddExceptionHandler<GlobalExceptionHandler>();
 builder.Services.AddScoped<ITodoServices, TodoServices>();
@@ -27,32 +43,15 @@ builder.Services.AddSwaggerGen(c =>
     c.IncludeXmlComments(Path.Combine(AppContext.BaseDirectory, xmlFilename));
 });
 
-
-// builder.Services.AddExceptionHandler(options =>
-// {
-//     options.ExceptionHandlingPath = "/error";
-// });
-
 builder.Services.AddProblemDetails();
 builder.Services.AddLogging();
 
 var app = builder.Build();
-{
-    using var scope = app.Services.CreateScope();
-    var context = scope.ServiceProvider;
-}
+
 app.UseSwagger();
-
-// Configure the HTTP request pipeline.
-// if (app.Environment.IsDevelopment())
-// {
-    app.UseSwaggerUI();
-// }
-
+app.UseSwaggerUI();
 app.UseHttpsRedirection();
 app.UseExceptionHandler();
 app.UseAuthorization();
-
 app.MapControllers();
-
 app.Run();
