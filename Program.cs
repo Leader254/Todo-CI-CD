@@ -1,4 +1,7 @@
 using System.Reflection;
+using Azure.Identity;
+using Azure.Security.KeyVault.Secrets;
+using Microsoft.EntityFrameworkCore;
 using TodoAPI.AppDataContext;
 using TodoAPI.Interfaces;
 using TodoAPI.Middleware;
@@ -9,11 +12,9 @@ var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddControllers();
 
-// Add services to the container.
-// Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle
+// Add services to the container
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
-
 builder.Services.AddAutoMapper(AppDomain.CurrentDomain.GetAssemblies());
 
 builder.Services.Configure<DbSettings>(builder.Configuration.GetSection("DbSettings"));
@@ -27,32 +28,57 @@ builder.Services.AddSwaggerGen(c =>
     c.IncludeXmlComments(Path.Combine(AppContext.BaseDirectory, xmlFilename));
 });
 
+// Azure Key Vault Configuration
+if (!builder.Environment.IsDevelopment())
+{
+    Console.WriteLine("Fetching database connection string from Azure Key Vault...");
 
-// builder.Services.AddExceptionHandler(options =>
-// {
-//     options.ExceptionHandlingPath = "/error";
-// });
+    var keyVaultUri = builder.Configuration["KeyVault:KeyVaultURL"];
+    var clientId = builder.Configuration["KeyVault:ClientId"];
+    var clientSecret = builder.Configuration["KeyVault:ClientSecret"];
+    var tenantId = builder.Configuration["KeyVault:DirectoryId"];
 
+    if (string.IsNullOrEmpty(keyVaultUri) || string.IsNullOrEmpty(clientId) ||
+        string.IsNullOrEmpty(clientSecret) || string.IsNullOrEmpty(tenantId))
+    {
+        throw new InvalidOperationException("Key Vault credentials are missing from configuration.");
+    }
+
+    var credential = new ClientSecretCredential(tenantId, clientId, clientSecret);
+    var secretClient = new SecretClient(new Uri(keyVaultUri), credential);
+
+    // Fetch the connection string from Key Vault
+    var secretName = "db-connection-value";
+    var connectionStringSecret = secretClient.GetSecret(secretName).Value.Value;
+
+    if (string.IsNullOrEmpty(connectionStringSecret))
+    {
+        throw new InvalidOperationException("Failed to retrieve database connection string from Key Vault.");
+    }
+
+    builder.Services.AddDbContext<TodoDbContext>(options =>
+    {
+        options.UseSqlServer(connectionStringSecret);
+    });
+}
+else
+{
+    Console.WriteLine("Using local development database connection.");
+    builder.Services.AddDbContext<TodoDbContext>(options =>
+    {
+        options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection"));
+    });
+}
+
+// Other configurations
 builder.Services.AddProblemDetails();
 builder.Services.AddLogging();
 
 var app = builder.Build();
-{
-    using var scope = app.Services.CreateScope();
-    var context = scope.ServiceProvider;
-}
 app.UseSwagger();
-
-// Configure the HTTP request pipeline.
-// if (app.Environment.IsDevelopment())
-// {
-    app.UseSwaggerUI();
-// }
-
+app.UseSwaggerUI();
 app.UseHttpsRedirection();
 app.UseExceptionHandler();
 app.UseAuthorization();
-
 app.MapControllers();
-
 app.Run();
