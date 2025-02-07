@@ -11,8 +11,6 @@ using TodoAPI.Services;
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddControllers();
-
-// Add services to the container
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 builder.Services.AddAutoMapper(AppDomain.CurrentDomain.GetAssemblies());
@@ -28,37 +26,39 @@ builder.Services.AddSwaggerGen(c =>
     c.IncludeXmlComments(Path.Combine(AppContext.BaseDirectory, xmlFilename));
 });
 
-// Azure Key Vault Configuration
-if (!builder.Environment.IsDevelopment())
+// Read bypass flag from configuration
+bool bypassKeyVault = builder.Configuration.GetValue<bool>("AppSettings:ByPassKeyVault");
+
+if (!bypassKeyVault && !builder.Environment.IsDevelopment()) 
 {
     Console.WriteLine("Fetching database connection string from Azure Key Vault...");
 
     var keyVaultUri = builder.Configuration["KeyVault:KeyVaultURL"];
-    var clientId = builder.Configuration["KeyVault:ClientId"];
-    var clientSecret = builder.Configuration["KeyVault:ClientSecret"];
-    var tenantId = builder.Configuration["KeyVault:DirectoryId"];
+    var clientId = Environment.GetEnvironmentVariable("AZURE_CLIENT_ID");
+    var clientSecret = Environment.GetEnvironmentVariable("AZURE_CLIENT_SECRET");
+    var tenantId = Environment.GetEnvironmentVariable("AZURE_TENANT_ID");
 
     if (string.IsNullOrEmpty(keyVaultUri) || string.IsNullOrEmpty(clientId) ||
         string.IsNullOrEmpty(clientSecret) || string.IsNullOrEmpty(tenantId))
     {
-        throw new InvalidOperationException("Key Vault credentials are missing from configuration.");
+        throw new InvalidOperationException("Key Vault credentials are missing from environment variables.");
     }
 
     var credential = new ClientSecretCredential(tenantId, clientId, clientSecret);
     var secretClient = new SecretClient(new Uri(keyVaultUri), credential);
 
     // Fetch the connection string from Key Vault
-    var secretName = "db-connection-value";
-    var connectionStringSecret = secretClient.GetSecret(secretName).Value.Value;
+    var secretName = builder.Configuration["AppSettings:KeyVaultName"];
+    KeyVaultSecret connectionStringSecret = secretClient.GetSecret(secretName);
 
-    if (string.IsNullOrEmpty(connectionStringSecret))
+    if (string.IsNullOrEmpty(connectionStringSecret.Value))
     {
         throw new InvalidOperationException("Failed to retrieve database connection string from Key Vault.");
     }
 
     builder.Services.AddDbContext<TodoDbContext>(options =>
     {
-        options.UseSqlServer(connectionStringSecret);
+        options.UseSqlServer(connectionStringSecret.Value);
     });
 }
 else
